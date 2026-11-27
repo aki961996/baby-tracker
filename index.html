@@ -38,6 +38,10 @@
   .b-over{background:#ffebee;color:#c62828} .b-today{background:#fff3e0;color:#e65100}
   .sub-h{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px}
   .mini{border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;background:var(--green);color:#fff;font-weight:600}
+  .sleeping{background:#ede7f6;border:1px solid #d1c4e9;border-radius:14px;padding:12px 14px;margin-bottom:12px;
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px}
+  .sleeping .tx{flex:1}
+  .sleeping small{display:block;color:var(--muted);font-size:12px}
   .stat{background:var(--card);border-radius:14px;padding:12px;text-align:center;border:1px solid var(--line)}
   .stat b{display:block;font-size:22px}
   .stat span{font-size:12px;color:var(--muted)}
@@ -138,6 +142,9 @@
     <div class="stat"><b id="sPoop">0</b><span>💩 Poop today</span></div>
   </div>
 
+  <!-- Baby currently sleeping -->
+  <div class="sleeping" id="sleepingBar" style="display:none"></div>
+
   <!-- Upcoming doctor visits / vaccines -->
   <div class="upcoming" id="upcoming" style="display:none"></div>
 
@@ -181,10 +188,11 @@
         <div class="row">
           <div><label>Date</label><input type="date" name="date" required></div>
           <div><label>Slept at</label><input type="time" name="start" required></div>
-          <div><label>Woke up at</label><input type="time" name="end" required></div>
+          <div><label>Woke up at (empty = still sleeping)</label><input type="time" name="end"></div>
         </div>
         <div class="row"><div><label>Note</label><input name="note" placeholder="optional"></div></div>
         <button class="btn purple" type="submit">+ Add Sleep</button>
+        <button class="btn blue" type="button" onclick="startSleepNow()">😴 Sleeping now</button>
       </form>
     </div>
     <div class="card"><h2>Sleep list</h2><div id="sleepList"></div></div>
@@ -249,7 +257,7 @@
       <h2>💉 Add vaccination</h2>
       <form id="vaccineForm">
         <div class="row">
-          <div><label>Vaccine name</label><input name="name" required placeholder="eg. Pentavalent 1, OPV, Rotavirus"></div>
+          <div><label>Vaccine name</label><input name="vname" required placeholder="eg. Pentavalent 1, OPV, Rotavirus"></div>
           <div><label>Due date</label><input type="date" name="date" required></div>
           <div><label>Time</label><input type="time" name="time"></div>
         </div>
@@ -323,9 +331,10 @@
 <script>
 /* ---------- Storage ---------- */
 const KEY = 'babyTracker_v1';
+const blank = () => ({milk:[], sleep:[], meds:{}, diaper:[], doctor:[], vaccine:[], name:'', img:''});
 const load = () => {
-  try { return Object.assign({milk:[], sleep:[], meds:{}, name:'', img:''}, JSON.parse(localStorage.getItem(KEY)) || {}); }
-  catch(e){ return {milk:[], sleep:[], meds:{}, name:'', img:''}; }
+  try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY)) || {}); }
+  catch(e){ return blank(); }
 };
 let db = load();
 const save = () => {
@@ -353,6 +362,10 @@ const fmtTime = t => {
   return `${h}:${pad(m)} ${ap}`;
 };
 const sleepMins = s => {
+  if(!s.end){ // still sleeping: count until now
+    const m = Math.floor((Date.now() - new Date(s.date+'T'+s.start).getTime())/60000);
+    return Math.max(0, m);
+  }
   const [sh,sm]=s.start.split(':').map(Number), [eh,em]=s.end.split(':').map(Number);
   let m = (eh*60+em)-(sh*60+sm); if(m<0) m+=1440; return m;
 };
@@ -406,18 +419,19 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
 
 /* ---------- Form defaults ---------- */
 function setDefaults(){
-  ['milkForm','sleepForm','medForm'].forEach(id=>{
-    const f=document.getElementById(id);
+  ['milkForm','sleepForm','medForm','diaperForm','doctorForm'].forEach(id=>{
+    const f=document.getElementById(id).elements;
     if(!f.date.value) f.date.value=todayStr();
   });
-  const mf=document.getElementById('milkForm'); if(!mf.time.value) mf.time.value=nowTime();
-  const md=document.getElementById('medForm'); if(!md.time.value) md.time.value=nowTime();
+  ['milkForm','medForm','diaperForm'].forEach(id=>{
+    const f=document.getElementById(id).elements; if(!f.time.value) f.time.value=nowTime();
+  });
 }
-function quickNow(id){ const f=document.getElementById(id); f.date.value=todayStr(); f.time.value=nowTime(); }
+function quickNow(id){ const f=document.getElementById(id).elements; f.date.value=todayStr(); f.time.value=nowTime(); }
 
 /* ---------- Milk ---------- */
 document.getElementById('milkForm').addEventListener('submit', e => {
-  e.preventDefault(); const f=e.target;
+  e.preventDefault(); const f=e.target.elements;
   db.milk.push({id:uid(), date:f.date.value, time:f.time.value, type:f.type.value, ml:f.ml.value, note:f.note.value.trim()});
   save(); f.ml.value=''; f.note.value=''; f.time.value=nowTime();
   renderAll(); toast('Feed added 🍼');
@@ -437,7 +451,7 @@ function renderMilk(){
 
 /* ---------- Sleep ---------- */
 document.getElementById('sleepForm').addEventListener('submit', e => {
-  e.preventDefault(); const f=e.target;
+  e.preventDefault(); const f=e.target.elements;
   db.sleep.push({id:uid(), date:f.date.value, start:f.start.value, end:f.end.value, note:f.note.value.trim()});
   save(); f.start.value=''; f.end.value=''; f.note.value='';
   renderAll(); toast('Sleep added 😴');
@@ -466,7 +480,7 @@ function markDose(kind){
   save(); renderAll(); toast(kind==='vitamin'?'Vitamin updated ☀️':'Medicine updated 🌙');
 }
 document.getElementById('medForm').addEventListener('submit', e => {
-  e.preventDefault(); const f=e.target;
+  e.preventDefault(); const f=e.target.elements;
   db.meds[f.date.value]=db.meds[f.date.value]||{};
   db.meds[f.date.value][f.kind.value]=f.time.value;
   save(); renderAll(); toast('Saved');
@@ -501,6 +515,114 @@ function renderMeds(){
   tb.innerHTML = all.reverse().map(d=>`<tr><td>${fmtDate(d)}</td><td>${cell(d,'vitamin')}</td><td>${cell(d,'medicine')}</td></tr>`).join('');
 }
 
+/* ---------- Diaper (urine / poop) ---------- */
+document.getElementById('diaperForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target.elements;
+  db.diaper.push({id:uid(), date:f.date.value, time:f.time.value, kind:f.kind.value, color:f.color.value, note:f.note.value.trim()});
+  save(); f.note.value=''; f.color.value=''; f.time.value=nowTime();
+  renderAll(); toast('Added 🧷');
+});
+const DK = {wee:['💧','Urine'], poop:['💩','Poop'], both:['💧💩','Urine + Poop']};
+const countWee = a => a.filter(x=>x.kind!=='poop').length;
+const countPoop = a => a.filter(x=>x.kind!=='wee').length;
+function renderDiaper(){
+  const el=document.getElementById('diaperList');
+  if(!db.diaper.length){ el.innerHTML='<div class="empty">Nothing logged yet</div>'; return; }
+  el.innerHTML = groupByDate(db.diaper,'time').map(([d,items])=>
+    `<div class="day"><div class="day-h">${fmtDate(d)}<small>💧 ${countWee(items)} · 💩 ${countPoop(items)}</small></div>
+      ${items.map(x=>`<div class="item"><span class="ic">${DK[x.kind][0]}</span><div class="tx">
+        <b>${fmtTime(x.time)}</b> · ${DK[x.kind][1]}${x.color?` · ${esc(x.color)}`:''}
+        ${x.note?`<div>${esc(x.note)}</div>`:''}</div>
+        <button class="del" onclick="del('diaper','${x.id}')" title="Delete">✕</button></div>`).join('')}</div>`
+  ).join('');
+}
+
+/* ---------- Doctor visits ---------- */
+document.getElementById('doctorForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target.elements;
+  db.doctor.push({id:uid(), date:f.date.value, time:f.time.value, doctor:f.doctor.value.trim(), place:f.place.value.trim(),
+    reason:f.reason.value.trim(), weight:f.weight.value, height:f.height.value, note:f.note.value.trim()});
+  save(); ['time','doctor','place','reason','weight','height','note'].forEach(k=>f[k].value='');
+  renderAll(); toast('Visit added 🩺');
+});
+const dayBadge = (d, done) => {
+  const t=todayStr();
+  if(done) return '<span class="badge b-done">Done</span>';
+  if(d===t) return '<span class="badge b-today">Today</span>';
+  if(d>t) return '<span class="badge b-up">Upcoming</span>';
+  return '<span class="badge b-over">Overdue</span>';
+};
+function renderDoctor(){
+  const el=document.getElementById('doctorList');
+  if(!db.doctor.length){ el.innerHTML='<div class="empty">No visits yet</div>'; return; }
+  const t=todayStr();
+  const key = x => x.date+(x.time||'');
+  const up = db.doctor.filter(x=>x.date>=t).sort((a,b)=>key(a).localeCompare(key(b)));
+  const past = db.doctor.filter(x=>x.date<t).sort((a,b)=>key(b).localeCompare(key(a)));
+  const row = (x,badge) => `<div class="item"><span class="ic">🩺</span><div class="tx">
+      <b>${fmtDate(x.date)}${x.time?' · '+fmtTime(x.time):''}</b>${badge}
+      <div>${[x.doctor,x.place].filter(Boolean).map(esc).join(' · ')||'-'}</div>
+      ${x.reason?`<div>Reason: ${esc(x.reason)}</div>`:''}
+      ${(x.weight||x.height)?`<div>${x.weight?'⚖️ '+esc(x.weight)+' kg ':''}${x.height?'📏 '+esc(x.height)+' cm':''}</div>`:''}
+      ${x.note?`<div>📝 ${esc(x.note)}</div>`:''}</div>
+      <button class="del" onclick="del('doctor','${x.id}')" title="Delete">✕</button></div>`;
+  el.innerHTML =
+    (up.length?`<div class="sub-h">Upcoming</div>${up.map(x=>row(x,dayBadge(x.date,false))).join('')}`:'') +
+    (past.length?`<div class="sub-h">Past visits</div>${past.map(x=>row(x,'')).join('')}`:'');
+}
+
+/* ---------- Vaccines ---------- */
+document.getElementById('vaccineForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target.elements;
+  db.vaccine.push({id:uid(), name:f.vname.value.trim(), date:f.date.value, time:f.time.value, place:f.place.value.trim(),
+    note:f.note.value.trim(), given: f.status.value==='given' ? f.date.value : ''});
+  save(); ['vname','time','note'].forEach(k=>f[k].value=''); f.status.value='due';
+  renderAll(); toast('Vaccine added 💉');
+});
+function giveVaccine(id){
+  const v=db.vaccine.find(x=>x.id===id); if(!v) return;
+  if(v.given){ if(!confirm('Mark as NOT given?')) return; v.given=''; }
+  else {
+    const d=prompt('Given on which date? (YYYY-MM-DD)', todayStr());
+    if(d===null) return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ toast('Use YYYY-MM-DD format'); return; }
+    v.given=d;
+  }
+  save(); renderAll();
+}
+function renderVaccine(){
+  const el=document.getElementById('vaccineList');
+  if(!db.vaccine.length){ el.innerHTML='<div class="empty">No vaccines added yet</div>'; return; }
+  const pending = db.vaccine.filter(x=>!x.given).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const done = db.vaccine.filter(x=>x.given).sort((a,b)=>b.given.localeCompare(a.given));
+  const row = x => `<div class="item"><span class="ic">💉</span><div class="tx">
+      <b>${esc(x.name)}</b>${dayBadge(x.date, !!x.given)}
+      <div>Due: ${fmtDate(x.date)}${x.time?' · '+fmtTime(x.time):''}${x.place?' · '+esc(x.place):''}</div>
+      ${x.given?`<div class="ok">✔ Given on ${fmtDate(x.given)}</div>`:''}
+      ${x.note?`<div>📝 ${esc(x.note)}</div>`:''}</div>
+      <button class="mini" style="${x.given?'background:#bdbdbd':''}" onclick="giveVaccine('${x.id}')">${x.given?'Undo':'Given'}</button>
+      <button class="del" onclick="del('vaccine','${x.id}')" title="Delete">✕</button></div>`;
+  el.innerHTML =
+    (pending.length?`<div class="sub-h">Scheduled</div>${pending.map(row).join('')}`:'') +
+    (done.length?`<div class="sub-h">Completed</div>${done.map(row).join('')}`:'');
+}
+
+/* ---------- Upcoming reminder strip ---------- */
+function renderUpcoming(){
+  const t=todayStr(), lim=new Date(); lim.setDate(lim.getDate()+7);
+  const limS=`${lim.getFullYear()}-${pad(lim.getMonth()+1)}-${pad(lim.getDate())}`;
+  const items=[];
+  db.doctor.filter(x=>x.date>=t && x.date<=limS).forEach(x=>items.push([x.date+(x.time||''),
+    `🩺 Doctor${x.doctor?' ('+esc(x.doctor)+')':''}: ${fmtDate(x.date)}${x.time?' · '+fmtTime(x.time):''}`]));
+  db.vaccine.filter(x=>!x.given && x.date<=limS).forEach(x=>items.push([x.date+(x.time||''),
+    `💉 ${esc(x.name)}: ${fmtDate(x.date)}${x.time?' · '+fmtTime(x.time):''}${x.date<t?' <span class="badge b-over">Overdue</span>':''}`]));
+  const el=document.getElementById('upcoming');
+  if(!items.length){ el.style.display='none'; return; }
+  items.sort((a,b)=>a[0].localeCompare(b[0]));
+  el.style.display='block';
+  el.innerHTML='<b>📅 Coming up (next 7 days)</b>'+items.map(i=>`<div>${i[1]}</div>`).join('');
+}
+
 /* ---------- Common ---------- */
 function del(type,id){
   if(!confirm('Delete this entry?')) return;
@@ -515,8 +637,11 @@ function renderStats(){
   document.getElementById('sSleep').textContent=fmtDur(mins).replace(' 0m','');
   const m=db.meds[t]||{};
   document.getElementById('sMeds').textContent=`${(m.vitamin?1:0)+(m.medicine?1:0)}/2`;
+  const dp=db.diaper.filter(x=>x.date===t);
+  document.getElementById('sWee').textContent=countWee(dp);
+  document.getElementById('sPoop').textContent=countPoop(dp);
 }
-function renderAll(){ renderStats(); renderMilk(); renderSleep(); renderMeds(); }
+function renderAll(){ renderStats(); renderUpcoming(); renderMilk(); renderSleep(); renderMeds(); renderDiaper(); renderDoctor(); renderVaccine(); }
 
 /* ---------- Backup ---------- */
 function exportData(){
