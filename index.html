@@ -42,6 +42,8 @@
     display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px}
   .sleeping .tx{flex:1}
   .sleeping small{display:block;color:var(--muted);font-size:12px}
+  .wake{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .wake input{width:auto;padding:6px 8px;font-size:14px}
   .stat{background:var(--card);border-radius:14px;padding:12px;text-align:center;border:1px solid var(--line)}
   .stat b{display:block;font-size:22px}
   .stat span{font-size:12px;color:var(--muted)}
@@ -188,11 +190,11 @@
         <div class="row">
           <div><label>Date</label><input type="date" name="date" required></div>
           <div><label>Slept at</label><input type="time" name="start" required></div>
-          <div><label>Woke up at (empty = still sleeping)</label><input type="time" name="end"></div>
+          <div><label>Note</label><input name="note" placeholder="optional"></div>
         </div>
-        <div class="row"><div><label>Note</label><input name="note" placeholder="optional"></div></div>
         <button class="btn purple" type="submit">+ Add Sleep</button>
-        <button class="btn blue" type="button" onclick="startSleepNow()">😴 Sleeping now</button>
+        <button class="btn blue" type="button" onclick="sleepNow()">Now</button>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">Wake up time list-il add cheyyuka.</div>
       </form>
     </div>
     <div class="card"><h2>Sleep list</h2><div id="sleepList"></div></div>
@@ -452,10 +454,31 @@ function renderMilk(){
 /* ---------- Sleep ---------- */
 document.getElementById('sleepForm').addEventListener('submit', e => {
   e.preventDefault(); const f=e.target.elements;
-  db.sleep.push({id:uid(), date:f.date.value, start:f.start.value, end:f.end.value, note:f.note.value.trim()});
-  save(); f.start.value=''; f.end.value=''; f.note.value='';
+  if(db.sleep.some(x=>!x.end)){ toast('Previous sleep-nu wake up time add cheyyuka'); return; }
+  db.sleep.push({id:uid(), date:f.date.value, start:f.start.value, end:'', note:f.note.value.trim()});
+  save(); f.start.value=''; f.note.value='';
   renderAll(); toast('Sleep added 😴');
 });
+function sleepNow(){ const f=document.getElementById('sleepForm').elements; f.date.value=todayStr(); f.start.value=nowTime(); }
+// wake-up time box shown in the list (and in the top bar) for an open sleep
+const wakeBox = (id, p='wk') => `<div class="wake"><input type="time" id="${p}-${id}" value="${nowTime()}">
+  <button class="mini" style="background:var(--purple)" onclick="saveWake('${id}','${p}')">☀️ Save wake up</button></div>`;
+function saveWake(id, p='wk'){
+  const s=db.sleep.find(x=>x.id===id); if(!s) return;
+  const v=document.getElementById(p+'-'+id).value;
+  if(!v){ toast('Wake up time kodukkuka'); return; }
+  s.end=v; save(); renderAll(); toast('Woke up ☀️ · slept '+fmtDur(sleepMins(s)));
+}
+function renderSleepingBar(){
+  const el=document.getElementById('sleepingBar');
+  const s=db.sleep.find(x=>!x.end);
+  if(!s){ el.style.display='none'; return; }
+  if(el.contains(document.activeElement)) return; // don't reset while typing
+  el.style.display='flex';
+  el.innerHTML=`<span style="font-size:26px">😴</span><div class="tx"><b>Baby is sleeping</b>
+    <small>Since ${fmtTime(s.start)}${s.date!==todayStr()?' ('+fmtDate(s.date)+')':''} · ${fmtDur(sleepMins(s))} so far</small>
+    ${wakeBox(s.id,'wkb')}</div>`;
+}
 function renderSleep(){
   const el=document.getElementById('sleepList');
   if(!db.sleep.length){ el.innerHTML='<div class="empty">No sleep logged yet</div>'; return; }
@@ -463,8 +486,11 @@ function renderSleep(){
     const total = items.reduce((s,x)=>s+sleepMins(x),0);
     return `<div class="day"><div class="day-h">${fmtDate(d)}<small>${items.length} naps · ${fmtDur(total)}</small></div>
       ${items.map(x=>`<div class="item"><span class="ic">😴</span><div class="tx">
-        <b>${fmtTime(x.start)} → ${fmtTime(x.end)}</b> · ${fmtDur(sleepMins(x))}
-        ${x.note?`<div>${esc(x.note)}</div>`:''}</div>
+        ${x.end
+          ? `<b>${fmtTime(x.start)} → ${fmtTime(x.end)}</b> · ${fmtDur(sleepMins(x))}`
+          : `<b>${fmtTime(x.start)} → ...</b><span class="badge b-up">Sleeping</span> · ${fmtDur(sleepMins(x))} so far`}
+        ${x.note?`<div>${esc(x.note)}</div>`:''}
+        ${x.end?'':wakeBox(x.id)}</div>
         <button class="del" onclick="del('sleep','${x.id}')" title="Delete">✕</button></div>`).join('')}</div>`;
   }).join('');
 }
@@ -641,7 +667,7 @@ function renderStats(){
   document.getElementById('sWee').textContent=countWee(dp);
   document.getElementById('sPoop').textContent=countPoop(dp);
 }
-function renderAll(){ renderStats(); renderUpcoming(); renderMilk(); renderSleep(); renderMeds(); renderDiaper(); renderDoctor(); renderVaccine(); }
+function renderAll(){ renderStats(); renderSleepingBar(); renderUpcoming(); renderMilk(); renderSleep(); renderMeds(); renderDiaper(); renderDoctor(); renderVaccine(); }
 
 /* ---------- Backup ---------- */
 function exportData(){
@@ -659,7 +685,11 @@ document.getElementById('importInput').addEventListener('change', e=>{
 
 /* ---------- Init ---------- */
 renderBanner(); setDefaults(); renderAll();
-setInterval(()=>{ renderStats(); renderMeds(); }, 60000); // refresh dose status every minute
+setInterval(()=>{
+  renderStats(); renderMeds(); renderSleepingBar();
+  // refresh sleep list only if user is not typing a wake-up time there
+  if(!document.getElementById('sleepList').contains(document.activeElement)) renderSleep();
+}, 60000); // refresh dose status every minute
 </script>
 </body>
 </html>
