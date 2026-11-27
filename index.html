@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baby Tracker</title>
+<style>
+  :root{
+    --bg:#fff8f3; --card:#ffffff; --ink:#2d2a32; --muted:#8a8494;
+    --pink:#ff8fab; --blue:#7ec8e3; --purple:#b39ddb; --green:#81c784; --orange:#ffb74d;
+    --line:#f0e6ee; --radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+
+  /* Banner */
+  .banner{position:relative;border-radius:24px;overflow:hidden;height:280px;
+    background:linear-gradient(135deg,#ffd6e0,#d6ecff);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+  .banner img{width:100%;height:100%;object-fit:cover;display:block}
+  .banner .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:96px}
+  .banner .overlay{position:absolute;inset:auto 0 0 0;padding:20px;
+    background:linear-gradient(transparent,rgba(0,0,0,.55));color:#fff}
+  .banner h1{font-size:28px;font-weight:700}
+  .banner p{opacity:.9;font-size:14px}
+  .banner .edit{position:absolute;top:12px;right:12px;display:flex;gap:8px}
+  .chip{background:rgba(255,255,255,.9);border:none;border-radius:999px;padding:6px 12px;
+    font-size:13px;cursor:pointer;color:var(--ink)}
+  .chip:hover{background:#fff}
+
+  /* Today summary */
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:16px 0}
+  .upcoming{background:#fffbe9;border:1px solid #ffe7a3;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+  .upcoming b{display:block;margin-bottom:4px}
+  .upcoming div{padding:2px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
+  .b-up{background:#e3f2fd;color:#1565c0} .b-done{background:#e8f5e9;color:#2e7d32}
+  .b-over{background:#ffebee;color:#c62828} .b-today{background:#fff3e0;color:#e65100}
+  .sub-h{font-size:13px;font-weight:700;color:var(--muted);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+  .mini{border:none;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;background:var(--green);color:#fff;font-weight:600}
+  .stat{background:var(--card);border-radius:14px;padding:12px;text-align:center;border:1px solid var(--line)}
+  .stat b{display:block;font-size:22px}
+  .stat span{font-size:12px;color:var(--muted)}
+
+  /* Tabs */
+  .tabs{display:flex;gap:8px;margin:8px 0 14px;overflow-x:auto}
+  .tab{flex:1;min-width:110px;border:none;padding:12px;border-radius:14px;background:var(--card);
+    font-size:15px;cursor:pointer;border:1px solid var(--line);color:var(--ink)}
+  .tab.active{color:#fff;border-color:transparent}
+  .tab[data-t="milk"].active{background:var(--pink)}
+  .tab[data-t="sleep"].active{background:var(--purple)}
+  .tab[data-t="meds"].active{background:var(--green)}
+  .tab[data-t="diaper"].active{background:var(--orange)}
+  .tab[data-t="doctor"].active{background:var(--blue)}
+  .tab[data-t="vaccine"].active{background:#e57373}
+  .btn.red{background:#e57373}
+  .panel{display:none}
+  .panel.active{display:block}
+
+  .card{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:14px;
+    border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.03)}
+  .card h2{font-size:18px;margin-bottom:12px}
+  form .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid #e3d9e3;border-radius:10px;font-size:15px;
+    font-family:inherit;background:#fffdfd}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);border-color:transparent}
+  .btn{border:none;border-radius:12px;padding:11px 18px;font-size:15px;cursor:pointer;color:#fff;font-weight:600}
+  .btn.pink{background:var(--pink)} .btn.purple{background:var(--purple)} .btn.green{background:var(--green)}
+  .btn.orange{background:var(--orange)} .btn.blue{background:var(--blue)}
+  .btn:active{transform:scale(.98)}
+
+  /* Lists */
+  .day{margin-top:14px}
+  .day-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px;
+    padding:6px 0;border-bottom:2px dashed var(--line);margin-bottom:6px}
+  .day-h small{color:var(--muted);font-weight:500}
+  .item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#fcf8fb;margin-bottom:6px}
+  .item .ic{font-size:22px}
+  .item .tx{flex:1}
+  .item .tx b{font-size:15px}
+  .item .tx div{font-size:13px;color:var(--muted)}
+  .del{background:none;border:none;font-size:18px;cursor:pointer;color:#c9a0ae;padding:4px 8px}
+  .del:hover{color:#e5536f}
+  .empty{text-align:center;color:var(--muted);padding:18px;font-size:14px}
+
+  /* Meds today */
+  .dose-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .dose{border-radius:16px;padding:16px;text-align:center;border:2px solid var(--line)}
+  .dose .t{font-size:28px;font-weight:700}
+  .dose .n{font-size:14px;color:var(--muted);margin-bottom:10px}
+  .dose.done{border-color:var(--green);background:#f1faf1}
+  .dose.late{border-color:#ffcdd2;background:#fff5f6}
+  .dose .st{font-size:13px;margin-top:8px}
+  .tbl{width:100%;border-collapse:collapse;font-size:14px}
+  .tbl th,.tbl td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left}
+  .tbl th{color:var(--muted);font-weight:600;font-size:12px}
+  .ok{color:#2e7d32;font-weight:600} .miss{color:#d84360;font-weight:600}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--ink);
+    color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;transition:transform .25s;z-index:9}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:20px 0}
+  footer button{background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;margin:0 6px}
+
+  @media (max-width:560px){
+    .banner{height:220px}
+    .stats{grid-template-columns:repeat(3,1fr)}
+    .dose-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Banner -->
+  <div class="banner">
+    <div class="ph" id="ph">👶</div>
+    <img id="babyImg" alt="Baby" style="display:none">
+    <div class="edit">
+      <button class="chip" onclick="document.getElementById('imgInput').click()">📷 Photo</button>
+      <button class="chip" onclick="editName()">✏️ Name</button>
+    </div>
+    <input type="file" id="imgInput" accept="image/*" hidden>
+    <div class="overlay">
+      <h1 id="babyName">Our Little One</h1>
+      <p id="todayLabel"></p>
+    </div>
+  </div>
+
+  <!-- Today stats -->
+  <div class="stats">
+    <div class="stat"><b id="sFeeds">0</b><span>Feeds today</span></div>
+    <div class="stat"><b id="sMl">0</b><span>ml today</span></div>
+    <div class="stat"><b id="sSleep">0h</b><span>Sleep today</span></div>
+    <div class="stat"><b id="sMeds">0/2</b><span>Doses today</span></div>
+    <div class="stat"><b id="sWee">0</b><span>💧 Urine today</span></div>
+    <div class="stat"><b id="sPoop">0</b><span>💩 Poop today</span></div>
+  </div>
+
+  <!-- Upcoming doctor visits / vaccines -->
+  <div class="upcoming" id="upcoming" style="display:none"></div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-t="milk">🍼 Milk</button>
+    <button class="tab" data-t="sleep">😴 Sleep</button>
+    <button class="tab" data-t="diaper">🧷 Urine / Poop</button>
+    <button class="tab" data-t="meds">💊 Vitamin &amp; Medicine</button>
+    <button class="tab" data-t="doctor">🩺 Doctor</button>
+    <button class="tab" data-t="vaccine">💉 Vaccine</button>
+  </div>
+
+  <!-- MILK -->
+  <section class="panel active" id="p-milk">
+    <div class="card">
+      <h2>🍼 Add milk feeding</h2>
+      <form id="milkForm">
+        <div class="row">
+          <div><label>Date</label><input type="date" name="date" required></div>
+          <div><label>Time</label><input type="time" name="time" required></div>
+          <div><label>Type</label>
+            <select name="type">
+              <option>Breast milk</option><option>Formula</option><option>Pumped milk</option>
+            </select></div>
+          <div><label>Amount (ml)</label><input type="number" name="ml" min="0" placeholder="eg. 90"></div>
+        </div>
+        <div class="row"><div><label>Note</label><input name="note" placeholder="optional"></div></div>
+        <button class="btn pink" type="submit">+ Add Feed</button>
+        <button class="btn blue" type="button" onclick="quickNow('milkForm')">Now</button>
+      </form>
+    </div>
+    <div class="card"><h2>Feeding list</h2><div id="milkList"></div></div>
+  </section>
+
+  <!-- SLEEP -->
+  <section class="panel" id="p-sleep">
+    <div class="card">
+      <h2>😴 Add sleep</h2>
+      <form id="sleepForm">
+        <div class="row">
+          <div><label>Date</label><input type="date" name="date" required></div>
+          <div><label>Slept at</label><input type="time" name="start" required></div>
+          <div><label>Woke up at</label><input type="time" name="end" required></div>
+        </div>
+        <div class="row"><div><label>Note</label><input name="note" placeholder="optional"></div></div>
+        <button class="btn purple" type="submit">+ Add Sleep</button>
+      </form>
+    </div>
+    <div class="card"><h2>Sleep list</h2><div id="sleepList"></div></div>
+  </section>
+
+  <!-- DIAPER -->
+  <section class="panel" id="p-diaper">
+    <div class="card">
+      <h2>🧷 Add urine / poop</h2>
+      <form id="diaperForm">
+        <div class="row">
+          <div><label>Date</label><input type="date" name="date" required></div>
+          <div><label>Time</label><input type="time" name="time" required></div>
+          <div><label>Type</label>
+            <select name="kind">
+              <option value="wee">💧 Urine</option>
+              <option value="poop">💩 Poop</option>
+              <option value="both">💧💩 Both</option>
+            </select></div>
+          <div><label>Poop colour / type</label>
+            <select name="color">
+              <option value="">-</option>
+              <option>Yellow</option><option>Mustard</option><option>Green</option>
+              <option>Brown</option><option>Watery</option><option>Hard</option>
+              <option>Black</option><option>Red / blood</option><option>White / pale</option>
+            </select></div>
+        </div>
+        <div class="row"><div><label>Note</label><input name="note" placeholder="optional"></div></div>
+        <button class="btn orange" type="submit">+ Add</button>
+        <button class="btn blue" type="button" onclick="quickNow('diaperForm')">Now</button>
+      </form>
+    </div>
+    <div class="card"><h2>Urine / poop list</h2><div id="diaperList"></div></div>
+  </section>
+
+  <!-- DOCTOR -->
+  <section class="panel" id="p-doctor">
+    <div class="card">
+      <h2>🩺 Add doctor visit</h2>
+      <form id="doctorForm">
+        <div class="row">
+          <div><label>Date</label><input type="date" name="date" required></div>
+          <div><label>Time</label><input type="time" name="time"></div>
+          <div><label>Doctor</label><input name="doctor" placeholder="Dr. name"></div>
+          <div><label>Hospital / clinic</label><input name="place" placeholder="optional"></div>
+        </div>
+        <div class="row">
+          <div><label>Reason</label><input name="reason" placeholder="eg. monthly checkup, fever"></div>
+          <div><label>Weight (kg)</label><input type="number" step="0.01" name="weight" placeholder="optional"></div>
+          <div><label>Height (cm)</label><input type="number" step="0.1" name="height" placeholder="optional"></div>
+        </div>
+        <div class="row"><div><label>Doctor's notes / advice</label><textarea name="note" rows="2" placeholder="optional"></textarea></div></div>
+        <button class="btn blue" type="submit">+ Add Visit</button>
+      </form>
+    </div>
+    <div class="card"><h2>Doctor visits</h2><div id="doctorList"></div></div>
+  </section>
+
+  <!-- VACCINE -->
+  <section class="panel" id="p-vaccine">
+    <div class="card">
+      <h2>💉 Add vaccination</h2>
+      <form id="vaccineForm">
+        <div class="row">
+          <div><label>Vaccine name</label><input name="name" required placeholder="eg. Pentavalent 1, OPV, Rotavirus"></div>
+          <div><label>Due date</label><input type="date" name="date" required></div>
+          <div><label>Time</label><input type="time" name="time"></div>
+        </div>
+        <div class="row">
+          <div><label>Hospital / clinic</label><input name="place" placeholder="optional"></div>
+          <div><label>Status</label>
+            <select name="status"><option value="due">Scheduled (not given yet)</option><option value="given">Already given</option></select></div>
+        </div>
+        <div class="row"><div><label>Note</label><input name="note" placeholder="eg. dose 2, slight fever after"></div></div>
+        <button class="btn red" type="submit">+ Add Vaccine</button>
+      </form>
+    </div>
+    <div class="card"><h2>Vaccination list</h2><div id="vaccineList"></div></div>
+  </section>
+
+  <!-- MEDS -->
+  <section class="panel" id="p-meds">
+    <div class="card">
+      <h2>💊 Today's doses</h2>
+      <div class="dose-grid">
+        <div class="dose" id="dose-vitamin">
+          <div class="t">9:00 AM</div>
+          <div class="n">☀️ Vitamin</div>
+          <button class="btn orange" onclick="markDose('vitamin')">Mark Given</button>
+          <div class="st"></div>
+        </div>
+        <div class="dose" id="dose-medicine">
+          <div class="t">9:00 PM</div>
+          <div class="n">🌙 Medicine</div>
+          <button class="btn purple" onclick="markDose('medicine')">Mark Given</button>
+          <div class="st"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Add / edit for any date</h2>
+      <form id="medForm">
+        <div class="row">
+          <div><label>Date</label><input type="date" name="date" required></div>
+          <div><label>Dose</label>
+            <select name="kind"><option value="vitamin">☀️ Vitamin (9 AM)</option><option value="medicine">🌙 Medicine (9 PM)</option></select></div>
+          <div><label>Given at</label><input type="time" name="time" required></div>
+        </div>
+        <button class="btn green" type="submit">Save</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Dose history</h2>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>☀️ Vitamin 9 AM</th><th>🌙 Medicine 9 PM</th></tr></thead>
+          <tbody id="medTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Data saved in this browser only (localStorage).
+    <br>
+    <button onclick="exportData()">Export backup</button>
+    <button onclick="document.getElementById('importInput').click()">Import backup</button>
+    <input type="file" id="importInput" accept="application/json" hidden>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Storage ---------- */
+const KEY = 'babyTracker_v1';
+const load = () => {
+  try { return Object.assign({milk:[], sleep:[], meds:{}, name:'', img:''}, JSON.parse(localStorage.getItem(KEY)) || {}); }
+  catch(e){ return {milk:[], sleep:[], meds:{}, name:'', img:''}; }
+};
+let db = load();
+const save = () => {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch(e){ toast('Storage full! Try a smaller photo.'); }
+};
+
+/* ---------- Helpers ---------- */
+const pad = n => String(n).padStart(2,'0');
+const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const nowTime = () => { const d=new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const fmtDate = s => {
+  const d = new Date(s+'T00:00');
+  const t = todayStr();
+  const y = new Date(); y.setDate(y.getDate()-1);
+  const ys = `${y.getFullYear()}-${pad(y.getMonth()+1)}-${pad(y.getDate())}`;
+  const base = d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  return s===t ? 'Today · '+base : s===ys ? 'Yesterday · '+base : base;
+};
+const fmtTime = t => {
+  if(!t) return '';
+  let [h,m] = t.split(':').map(Number);
+  const ap = h>=12?'PM':'AM'; h = h%12||12;
+  return `${h}:${pad(m)} ${ap}`;
+};
+const sleepMins = s => {
+  const [sh,sm]=s.start.split(':').map(Number), [eh,em]=s.end.split(':').map(Number);
+  let m = (eh*60+em)-(sh*60+sm); if(m<0) m+=1440; return m;
+};
+const fmtDur = m => `${Math.floor(m/60)}h ${m%60}m`;
+const esc = s => String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),1800); }
+
+function groupByDate(arr, timeKey){
+  const g = {};
+  arr.forEach(x => (g[x.date] = g[x.date] || []).push(x));
+  return Object.keys(g).sort().reverse().map(d => [d, g[d].sort((a,b)=>b[timeKey].localeCompare(a[timeKey]))]);
+}
+
+/* ---------- Banner ---------- */
+const img = document.getElementById('babyImg'), ph = document.getElementById('ph');
+function renderBanner(){
+  document.getElementById('babyName').textContent = db.name || 'Our Little One';
+  document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  // Priority: uploaded photo > baby.jpg in repo > emoji
+  img.onload = () => { img.style.display='block'; ph.style.display='none'; };
+  img.onerror = () => { img.style.display='none'; ph.style.display='flex'; };
+  img.src = db.img || 'baby.jpg';
+}
+function editName(){
+  const n = prompt("Baby's name:", db.name || '');
+  if(n!==null){ db.name = n.trim(); save(); renderBanner(); }
+}
+document.getElementById('imgInput').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    const i = new Image();
+    i.onload = () => {
+      // resize to keep localStorage small
+      const max = 1200, sc = Math.min(1, max/Math.max(i.width,i.height));
+      const c = document.createElement('canvas'); c.width=i.width*sc; c.height=i.height*sc;
+      c.getContext('2d').drawImage(i,0,0,c.width,c.height);
+      db.img = c.toDataURL('image/jpeg',0.8); save(); renderBanner(); toast('Photo updated');
+    };
+    i.src = ev.target.result;
+  };
+  r.readAsDataURL(f);
+  e.target.value='';
+});
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='p-'+b.dataset.t));
+});
+
+/* ---------- Form defaults ---------- */
+function setDefaults(){
+  ['milkForm','sleepForm','medForm'].forEach(id=>{
+    const f=document.getElementById(id);
+    if(!f.date.value) f.date.value=todayStr();
+  });
+  const mf=document.getElementById('milkForm'); if(!mf.time.value) mf.time.value=nowTime();
+  const md=document.getElementById('medForm'); if(!md.time.value) md.time.value=nowTime();
+}
+function quickNow(id){ const f=document.getElementById(id); f.date.value=todayStr(); f.time.value=nowTime(); }
+
+/* ---------- Milk ---------- */
+document.getElementById('milkForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target;
+  db.milk.push({id:uid(), date:f.date.value, time:f.time.value, type:f.type.value, ml:f.ml.value, note:f.note.value.trim()});
+  save(); f.ml.value=''; f.note.value=''; f.time.value=nowTime();
+  renderAll(); toast('Feed added 🍼');
+});
+function renderMilk(){
+  const el=document.getElementById('milkList');
+  if(!db.milk.length){ el.innerHTML='<div class="empty">No feeds yet</div>'; return; }
+  el.innerHTML = groupByDate(db.milk,'time').map(([d,items])=>{
+    const total = items.reduce((s,x)=>s+(+x.ml||0),0);
+    return `<div class="day"><div class="day-h">${fmtDate(d)}<small>${items.length} feeds${total?` · ${total} ml`:''}</small></div>
+      ${items.map(x=>`<div class="item"><span class="ic">🍼</span><div class="tx">
+        <b>${fmtTime(x.time)}</b> · ${esc(x.type)}${x.ml?` · <b>${esc(x.ml)} ml</b>`:''}
+        ${x.note?`<div>${esc(x.note)}</div>`:''}</div>
+        <button class="del" onclick="del('milk','${x.id}')" title="Delete">✕</button></div>`).join('')}</div>`;
+  }).join('');
+}
+
+/* ---------- Sleep ---------- */
+document.getElementById('sleepForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target;
+  db.sleep.push({id:uid(), date:f.date.value, start:f.start.value, end:f.end.value, note:f.note.value.trim()});
+  save(); f.start.value=''; f.end.value=''; f.note.value='';
+  renderAll(); toast('Sleep added 😴');
+});
+function renderSleep(){
+  const el=document.getElementById('sleepList');
+  if(!db.sleep.length){ el.innerHTML='<div class="empty">No sleep logged yet</div>'; return; }
+  el.innerHTML = groupByDate(db.sleep,'start').map(([d,items])=>{
+    const total = items.reduce((s,x)=>s+sleepMins(x),0);
+    return `<div class="day"><div class="day-h">${fmtDate(d)}<small>${items.length} naps · ${fmtDur(total)}</small></div>
+      ${items.map(x=>`<div class="item"><span class="ic">😴</span><div class="tx">
+        <b>${fmtTime(x.start)} → ${fmtTime(x.end)}</b> · ${fmtDur(sleepMins(x))}
+        ${x.note?`<div>${esc(x.note)}</div>`:''}</div>
+        <button class="del" onclick="del('sleep','${x.id}')" title="Delete">✕</button></div>`).join('')}</div>`;
+  }).join('');
+}
+
+/* ---------- Meds ---------- */
+// db.meds = { "2026-11-27": { vitamin:"09:05", medicine:"21:02" } }
+function markDose(kind){
+  const d=todayStr(); db.meds[d]=db.meds[d]||{};
+  if(db.meds[d][kind]){
+    if(!confirm('Already marked. Undo?')) return;
+    delete db.meds[d][kind];
+  } else db.meds[d][kind]=nowTime();
+  save(); renderAll(); toast(kind==='vitamin'?'Vitamin updated ☀️':'Medicine updated 🌙');
+}
+document.getElementById('medForm').addEventListener('submit', e => {
+  e.preventDefault(); const f=e.target;
+  db.meds[f.date.value]=db.meds[f.date.value]||{};
+  db.meds[f.date.value][f.kind.value]=f.time.value;
+  save(); renderAll(); toast('Saved');
+});
+function clearDose(d,kind){
+  if(!confirm('Remove this entry?')) return;
+  delete db.meds[d][kind]; if(!Object.keys(db.meds[d]).length) delete db.meds[d];
+  save(); renderAll();
+}
+function renderMeds(){
+  const t=todayStr(), m=db.meds[t]||{}, hr=new Date().getHours();
+  [['vitamin',9],['medicine',21]].forEach(([k,h])=>{
+    const box=document.getElementById('dose-'+k), st=box.querySelector('.st'), btn=box.querySelector('button');
+    box.classList.remove('done','late');
+    if(m[k]){ box.classList.add('done'); st.innerHTML=`<span class="ok">✔ Given at ${fmtTime(m[k])}</span>`; btn.textContent='Undo'; }
+    else { btn.textContent='Mark Given';
+      if(hr>=h){ box.classList.add('late'); st.innerHTML='<span class="miss">⏰ Due now / not given</span>'; }
+      else st.textContent='Pending'; }
+  });
+  // History table: every date from first record to today
+  const dates=Object.keys(db.meds).sort();
+  const tb=document.getElementById('medTable');
+  if(!dates.length){ tb.innerHTML='<tr><td colspan="3" class="empty">No doses logged yet</td></tr>'; return; }
+  const all=[]; const cur=new Date(dates[0]+'T00:00'), end=new Date(t+'T00:00');
+  while(cur<=end){ all.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`); cur.setDate(cur.getDate()+1); }
+  const cell=(d,k)=>{
+    const v=(db.meds[d]||{})[k];
+    if(v) return `<span class="ok">✔ ${fmtTime(v)}</span> <button class="del" onclick="clearDose('${d}','${k}')">✕</button>`;
+    const pending = d===t && new Date().getHours() < (k==='vitamin'?9:21);
+    return pending ? '<span style="color:var(--muted)">Pending</span>' : '<span class="miss">✘ Missed</span>';
+  };
+  tb.innerHTML = all.reverse().map(d=>`<tr><td>${fmtDate(d)}</td><td>${cell(d,'vitamin')}</td><td>${cell(d,'medicine')}</td></tr>`).join('');
+}
+
+/* ---------- Common ---------- */
+function del(type,id){
+  if(!confirm('Delete this entry?')) return;
+  db[type]=db[type].filter(x=>x.id!==id); save(); renderAll();
+}
+function renderStats(){
+  const t=todayStr();
+  const feeds=db.milk.filter(x=>x.date===t);
+  document.getElementById('sFeeds').textContent=feeds.length;
+  document.getElementById('sMl').textContent=feeds.reduce((s,x)=>s+(+x.ml||0),0);
+  const mins=db.sleep.filter(x=>x.date===t).reduce((s,x)=>s+sleepMins(x),0);
+  document.getElementById('sSleep').textContent=fmtDur(mins).replace(' 0m','');
+  const m=db.meds[t]||{};
+  document.getElementById('sMeds').textContent=`${(m.vitamin?1:0)+(m.medicine?1:0)}/2`;
+}
+function renderAll(){ renderStats(); renderMilk(); renderSleep(); renderMeds(); }
+
+/* ---------- Backup ---------- */
+function exportData(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
+  a.download=`baby-tracker-${todayStr()}.json`; a.click();
+}
+document.getElementById('importInput').addEventListener('change', e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=ev=>{ try{ db=Object.assign(load(),JSON.parse(ev.target.result)); save(); renderBanner(); renderAll(); toast('Backup restored'); }
+    catch(err){ toast('Invalid file'); } };
+  r.readAsText(f); e.target.value='';
+});
+
+/* ---------- Init ---------- */
+renderBanner(); setDefaults(); renderAll();
+setInterval(()=>{ renderStats(); renderMeds(); }, 60000); // refresh dose status every minute
+</script>
+</body>
+</html>
