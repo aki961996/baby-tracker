@@ -106,6 +106,12 @@
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--ink);
     color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;transition:transform .25s;z-index:9}
   .toast.show{transform:translateX(-50%) translateY(0)}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}
+  .gate-box{background:#fff;border-radius:24px;padding:30px;text-align:center;max-width:360px;width:100%;
+    box-shadow:0 8px 30px rgba(0,0,0,.08)}
+  .gate-box h2{margin:8px 0}
+  .gate-box p{color:var(--muted);font-size:14px;margin-bottom:16px}
+  .gate-box .btn{margin:4px}
   footer{text-align:center;color:var(--muted);font-size:12px;padding:20px 0}
   footer button{background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;margin:0 6px}
 
@@ -320,8 +326,7 @@
   </section>
 
   <footer>
-    Data saved in this browser only (localStorage).
-    <br>
+    <div id="cloudInfo">Data saved in this browser only (localStorage).</div>
     <button onclick="exportData()">Export backup</button>
     <button onclick="document.getElementById('importInput').click()">Import backup</button>
     <input type="file" id="importInput" accept="application/json" hidden>
@@ -330,7 +335,34 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Login screen (only used when Firebase is set up) -->
+<div id="gate" class="gate" style="display:none"><div class="gate-box">
+  <div style="font-size:48px">👶</div>
+  <h2>Baby Tracker</h2>
+  <p id="gateMsg">Loading...</p>
+  <button class="btn pink" id="gateBtn" style="display:none">Sign in with Google</button>
+  <button class="btn blue" id="gateOut" style="display:none">Sign out</button>
+</div></div>
+
 <script>
+/* =====================================================================
+   FIREBASE SETTINGS: paste your config from Firebase console here.
+   Leave as is to keep using this phone's storage only.
+   ===================================================================== */
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAFbBUVXKvyGmCKULEPNXg_t_0I7G30rbE",
+  authDomain: "baby-tracke.firebaseapp.com",
+  projectId: "baby-tracke",
+  storageBucket: "baby-tracke.firebasestorage.app",
+  messagingSenderId: "378060854250",
+  appId: "1:378060854250:web:5b603e8f0461a8b3e95893",
+  measurementId: "G-QM56XWPYLE"
+};
+// Only these Google accounts can open the tracker (same list goes in Firestore rules)
+window.ALLOWED_EMAILS = ["akhilesh@faircodetech.com", "smpmalpy@gmail.com"];
+/* ===================================================================== */
+window.CLOUD_ON = !!window.FIREBASE_CONFIG.apiKey && !window.FIREBASE_CONFIG.apiKey.startsWith('PASTE');
+
 /* ---------- Storage ---------- */
 const KEY = 'babyTracker_v1';
 const blank = () => ({milk:[], sleep:[], meds:{}, diaper:[], doctor:[], vaccine:[], name:'', img:''});
@@ -338,11 +370,39 @@ const load = () => {
   try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY)) || {}); }
   catch(e){ return blank(); }
 };
-let db = load();
+let db = window.CLOUD_ON ? blank() : load();
 const save = () => {
+  if(window.CLOUD_ON){ if(window.cloudSync) window.cloudSync(db); return; }
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch(e){ toast('Storage full! Try a smaller photo.'); }
 };
+// called by the Firebase module when data changes on any phone
+window.applyRemote = part => { Object.assign(db, part); renderBanner(); renderAll(); renderFooter(); };
+
+/* ---------- Cloud helpers ---------- */
+const hasLocalData = () => { const o=load(); return ['milk','sleep','diaper','doctor','vaccine'].some(k=>o[k].length) || Object.keys(o.meds).length>0; };
+function renderFooter(){
+  const el=document.getElementById('cloudInfo');
+  if(!window.CLOUD_ON){ el.textContent='Data saved in this browser only (localStorage).'; return; }
+  const showMig = window.CURRENT_EMAIL && hasLocalData() && !localStorage.getItem(KEY+'_migrated');
+  el.innerHTML = `☁️ Synced with family${window.CURRENT_EMAIL?' · '+esc(window.CURRENT_EMAIL):''}
+    ${window.CURRENT_EMAIL?'<button onclick="cloudSignOut()">Sign out</button>':''}
+    ${showMig?'<br><button onclick="migrateLocal()" style="color:var(--pink);font-weight:700">⬆️ Upload old data from this phone</button>':''}`;
+}
+// copy data saved earlier on this phone (localStorage) into the shared cloud data
+function migrateLocal(){
+  if(!confirm('Upload the data saved on this phone to the shared tracker?')) return;
+  const old=load(); let n=0;
+  ['milk','sleep','diaper','doctor','vaccine'].forEach(k=>{
+    const ids=new Set(db[k].map(x=>x.id));
+    old[k].forEach(x=>{ if(!ids.has(x.id)){ db[k].push(x); n++; } });
+  });
+  Object.keys(old.meds).forEach(d=>{ db.meds[d]=Object.assign({}, old.meds[d], db.meds[d]||{}); });
+  if(!db.name && old.name) db.name=old.name;
+  if(!db.img && old.img) db.img=old.img;
+  save(); localStorage.setItem(KEY+'_migrated','1');
+  renderBanner(); renderAll(); renderFooter(); toast(n+' entries uploaded ☁️');
+}
 
 /* ---------- Helpers ---------- */
 const pad = n => String(n).padStart(2,'0');
@@ -402,10 +462,10 @@ document.getElementById('imgInput').addEventListener('change', e => {
     const i = new Image();
     i.onload = () => {
       // resize to keep localStorage small
-      const max = 1200, sc = Math.min(1, max/Math.max(i.width,i.height));
+      const max = 800, sc = Math.min(1, max/Math.max(i.width,i.height));
       const c = document.createElement('canvas'); c.width=i.width*sc; c.height=i.height*sc;
       c.getContext('2d').drawImage(i,0,0,c.width,c.height);
-      db.img = c.toDataURL('image/jpeg',0.8); save(); renderBanner(); toast('Photo updated');
+      db.img = c.toDataURL('image/jpeg',0.7); save(); renderBanner(); toast('Photo updated');
     };
     i.src = ev.target.result;
   };
@@ -678,18 +738,132 @@ function exportData(){
 document.getElementById('importInput').addEventListener('change', e=>{
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=ev=>{ try{ db=Object.assign(load(),JSON.parse(ev.target.result)); save(); renderBanner(); renderAll(); toast('Backup restored'); }
+  r.onload=ev=>{ try{ Object.assign(db, blank(), JSON.parse(ev.target.result)); save(); renderBanner(); renderAll(); toast('Backup restored'); }
     catch(err){ toast('Invalid file'); } };
   r.readAsText(f); e.target.value='';
 });
 
 /* ---------- Init ---------- */
-renderBanner(); setDefaults(); renderAll();
+renderBanner(); setDefaults(); renderAll(); renderFooter();
+if(window.CLOUD_ON) document.getElementById('gate').style.display='flex';
 setInterval(()=>{
   renderStats(); renderMeds(); renderSleepingBar();
   // refresh sleep list only if user is not typing a wake-up time there
   if(!document.getElementById('sleepList').contains(document.activeElement)) renderSleep();
 }, 60000); // refresh dose status every minute
+</script>
+
+<!-- ================= Firebase sync (runs only when config is filled) ================= -->
+<script type="module">
+if (window.CLOUD_ON) {
+  const V = '13.2.0', B = `https://www.gstatic.com/firebasejs/${V}/`;
+  const { initializeApp } = await import(B + 'firebase-app.js');
+  const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } =
+    await import(B + 'firebase-auth.js');
+  const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+          collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } = await import(B + 'firebase-firestore.js');
+
+  const app  = initializeApp(window.FIREBASE_CONFIG);
+  const auth = getAuth(app);
+  // offline cache: entries added without internet sync when back online
+  const fs = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+
+  const FAM = 'home';                                   // families/home/...
+  const KINDS = ['milk','sleep','diaper','doctor','vaccine'];
+  const col = n => collection(fs, 'families', FAM, n);
+  const settingsRef = doc(fs, 'families', FAM, 'meta', 'settings');
+  const $ = id => document.getElementById(id);
+  const allowed = e => window.ALLOWED_EMAILS.map(x => x.toLowerCase()).includes((e || '').toLowerCase());
+  const stable = o => JSON.stringify(o, Object.keys(o).sort());   // flat objects, key-order independent
+  const strip = x => { const { by, updatedAt, ...rest } = x; return rest; };
+
+  // last known cloud state, used to work out what changed on save()
+  let remoteE = new Map(), remoteM = new Map(), remoteS = null, email = '', unsubs = [];
+
+  const showGate = (msg, signin, out) => {
+    $('gate').style.display = 'flex'; $('gateMsg').textContent = msg;
+    $('gateBtn').style.display = signin ? 'inline-block' : 'none';
+    $('gateOut').style.display = out ? 'inline-block' : 'none';
+  };
+  const hideGate = () => { $('gate').style.display = 'none'; };
+  const fail = e => {
+    console.error(e);
+    if (e.code === 'permission-denied') showGate('Permission denied. Check Firestore rules and the email list.', false, true);
+    else toast('Sync error: ' + (e.code || e.message));
+  };
+
+  $('gateBtn').onclick = async () => {
+    const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
+    try { await signInWithPopup(auth, p); }
+    catch (e) {
+      if (['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(e.code)) signInWithRedirect(auth, p);
+      else if (!['auth/popup-closed-by-user','auth/cancelled-popup-request'].includes(e.code)) { toast('Login error: ' + e.code); console.error(e); }
+    }
+  };
+  window.cloudSignOut = () => signOut(auth);
+  $('gateOut').onclick = window.cloudSignOut;
+
+  onAuthStateChanged(auth, user => {
+    unsubs.forEach(u => u()); unsubs = [];
+    remoteE = new Map(); remoteM = new Map(); remoteS = null;
+    if (!user) { window.CURRENT_EMAIL = ''; renderFooter(); showGate('Sign in to open the family tracker', true, false); return; }
+    if (!allowed(user.email)) { showGate(user.email + ' is not allowed. Sign in with the family Google account.', false, true); return; }
+    email = window.CURRENT_EMAIL = user.email;
+    showGate('Loading data...', false, false);
+    const ready = new Set(), mark = n => { ready.add(n); if (ready.size === 3) hideGate(); };
+
+    unsubs.push(onSnapshot(col('entries'), snap => {
+      const part = {}; KINDS.forEach(k => part[k] = []); remoteE = new Map();
+      snap.forEach(d => {
+        const { _type, ...item } = strip(d.data());
+        if (!part[_type]) return;
+        item.id = d.id; part[_type].push(item);
+        remoteE.set(d.id, stable({ ...item, _type }));
+      });
+      window.applyRemote(part); mark('e');
+    }, fail));
+
+    unsubs.push(onSnapshot(col('meds'), snap => {
+      const meds = {}; remoteM = new Map();
+      snap.forEach(d => { const v = strip(d.data()); meds[d.id] = v; remoteM.set(d.id, stable(v)); });
+      window.applyRemote({ meds }); mark('m');
+    }, fail));
+
+    unsubs.push(onSnapshot(settingsRef, d => {
+      const s = d.exists() ? d.data() : {};
+      const st = { name: s.name || '', img: s.img || '' };
+      remoteS = stable(st); window.applyRemote(st); mark('s');
+    }, fail));
+  });
+
+  // called by save(): write only what changed since the last cloud snapshot
+  window.cloudSync = db => {
+    if (!email || remoteS === null) return;
+    const stamp = { by: email, updatedAt: serverTimestamp() };
+    const seen = new Set();
+    KINDS.forEach(k => db[k].forEach(item => {
+      seen.add(item.id);
+      const clean = { ...item, _type: k }, s = stable(clean);
+      if (remoteE.get(item.id) !== s) {
+        remoteE.set(item.id, s);
+        const { id, ...data } = clean;
+        setDoc(doc(col('entries'), item.id), { ...data, ...stamp }).catch(fail);
+      }
+    }));
+    [...remoteE.keys()].forEach(id => { if (!seen.has(id)) { remoteE.delete(id); deleteDoc(doc(col('entries'), id)).catch(fail); } });
+
+    const seenM = new Set();
+    Object.entries(db.meds).forEach(([d, v]) => {
+      if (!Object.keys(v).length) return;
+      seenM.add(d); const s = stable(v);
+      if (remoteM.get(d) !== s) { remoteM.set(d, s); setDoc(doc(col('meds'), d), { ...v, ...stamp }).catch(fail); }
+    });
+    [...remoteM.keys()].forEach(d => { if (!seenM.has(d)) { remoteM.delete(d); deleteDoc(doc(col('meds'), d)).catch(fail); } });
+
+    const st = { name: db.name || '', img: db.img || '' }, ss = stable(st);
+    if (ss !== remoteS) { remoteS = ss; setDoc(settingsRef, { ...st, ...stamp }).catch(fail); }
+  };
+}
 </script>
 </body>
 </html>
